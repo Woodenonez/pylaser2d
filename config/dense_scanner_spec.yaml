@@ -1,0 +1,10 @@
+### System configuration
+ts: 0.1   # Size of the time-step (sampling time)
+
+### Scanner specifications
+angle_min: -3.14159 # -180 degrees
+angle_max: 3.14159 # 180 degrees
+angle_increment: 0.0174533 # 1 degree = 0.0174533 radians
+range_min: 0.1
+range_max: 30.0
+frame_id: "dense_laser"
