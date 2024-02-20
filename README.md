@@ -16,18 +16,27 @@ python src/test_scanner.py
 
 # Usage
 
+## LaserScanner
+This is the main class to simulate the laser scanner. Initialize it using the `from_yaml` method, where the example configuration is in `config/`.
+
+Before using the scanner, the map should be loaded via the `load_map` method, and the scanner should be initialized via the `load_scanner` method.
+
+Each `scan` method call will return a `LaserScanOutput` object.
+
 ## LaserScanOutput
 The format (data class) of the output of the laser scanner. This part is in the order of:
 - Properties
 - Configuration to initialize the object
 - Steps to use the object
 
-### property
+### Property
 - angles: A tuple of the (float) angles of the beams.
 - angles_deg: Similar to `angles`, but in degrees.
 - state: The state of the object, (x, y, theta).
 - ranges: A list of the (float) ranges/distances of the beams.
 - beam_end_points: A list of the (x, y) coordinates of the endpoints of the beams.
+
+Note that the order of the beams is from the minimum angle to the maximum angle (from the right to the left).
 
 ### Configuration
 It contains the following fields, similar to the [ROS message] `sensor_msgs/LaserScan`:
@@ -43,4 +52,5 @@ It contains the following fields, similar to the [ROS message] `sensor_msgs/Lase
 2. Initialize the object by telling its initial state, by calling `init_beams(...)`.
 3. Update the object by calling `update_ranges_and_beams(...)`.
 
-## LaserScanner
+## Acknowledgment
+The implementation is based on [DQN-Boosted MPC for Collision-Free Navigation of Mobile Robots](https://github.com/Woodenonez/TrajTrack_MPCnDQN_RLBoost), where the original paper is available in [IEEE CASE 2023](https://ieeexplore.ieee.org/document/10260515).
