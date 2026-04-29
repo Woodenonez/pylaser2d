@@ -7,11 +7,15 @@ A small [laser scanner]/[lidar] simulator in Python. The main dependency is `sha
 - `Numpy`
 - `Shapely`
 - `Matplotlib` (optional, for visualization)
+- `PyYAML`
 
 # Quickstart
-After installing the dependencies, you can run the example with (under the root directory):
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and requires Python ≥ 3.11.
+
+Install dependencies and run the example (from the root directory):
 ```bash
-python src/test_scanner.py
+uv sync
+uv run python src/test_scanner.py
 ```
 
 # Usage
