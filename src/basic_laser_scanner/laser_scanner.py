@@ -1,141 +1,191 @@
-import math
-import yaml # type: ignore
-import warnings
-from typing import TypedDict
+"""Unified laser-scanner entry point.
 
-import numpy as np
-from shapely.geometry import Point, LineString, Polygon # type: ignore
-from shapely.geometry.base import BaseGeometry # type: ignore
-from matplotlib.axes import Axes # type: ignore
+Selects the appropriate backend automatically based on the type of map
+passed to :meth:`LaserScanner.load_map`:
+
+* :class:`~basic_map.map_geometric.GeometricMap` → :class:`~basic_laser_scanner.laser_scanner_geo.LaserScannerGeo`
+* :class:`~basic_map.map_occupancy.OccupancyMap`  → :class:`~basic_laser_scanner.laser_scanner_occ.LaserScannerOcc`
+
+Both backends expose the same public interface
+(``load_map`` / ``load_scanner`` / ``scan`` / ``plot``), so after
+construction the returned :class:`LaserScanner` object can be used
+identically regardless of the underlying map type.
+
+Example::
+
+    scanner = LaserScanner.from_yaml("scanner.yaml")
+
+    # -- geometric map --
+    geo_map = GeometricMap.from_json("map.json")
+    scanner.load_map(geo_map)
+
+    # -- occupancy map --
+    occ_map = OccupancyMap.from_image("map.png", resolution=0.05)
+    scanner.load_map(occ_map)
+
+    scanner.load_scanner((x, y), heading)
+    scan_output = scanner.scan(t, [x, y, heading])
+"""
+from __future__ import annotations
+
+import yaml  # type: ignore
+from typing import Union
 
 from .laser_output import LaserScanOutput, LaserScanConfig
+from .laser_scanner_geo import LaserScannerGeo
+from .laser_scanner_occ import LaserScannerOcc
 
+
+# ---------------------------------------------------------------------------
+# Public type alias for the supported map objects
+# ---------------------------------------------------------------------------
+# Import here for type-checking only; the actual isinstance checks below use
+# the same classes at runtime.
+from basic_map.map_geometric import GeometricMap
+from basic_map.map_occupancy import OccupancyMap
+
+SupportedMap = Union[GeometricMap, OccupancyMap]
 
 PathNode = tuple[float, float]
 
 
-class BasicMap(TypedDict):
-    boundary_coords: list[PathNode]
-    obstacle_list: list[list[PathNode]]
-
-
 class LaserScanner:
+    """Unified laser-scanner entry point.
+
+    Internally delegates all work to either :class:`LaserScannerGeo` or
+    :class:`LaserScannerOcc` once a map has been loaded via
+    :meth:`load_map`.
+
+    Args:
+        config: Scanner configuration dictionary with keys ``angle_min``,
+            ``angle_max``, ``angle_increment``, ``range_min``, ``range_max``,
+            and ``frame_id``.
+    """
+
     def __init__(self, config: LaserScanConfig) -> None:
-        """Initializes the laser scanner with the given configuration.
+        self._cfg = config
+        self._backend: LaserScannerGeo | LaserScannerOcc | None = None
+
+    # ------------------------------------------------------------------
+    # Construction helpers
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def from_yaml(cls, config_fpath: str) -> "LaserScanner":
+        """Create a :class:`LaserScanner` from a YAML configuration file.
 
         Args:
-            config: The configuration for the laser scanner. It should be a dictionary with the following
-                keys: "angle_min", "angle_max", "angle_increment", "range_min", "range_max", and "frame_id".
+            config_fpath: Path to the YAML file.
         """
-        self._cfg = config
-        self._map_prepared = False
-        self._scanner_prepared = False
-
-    @property
-    def state(self):
-        return self._state
-    
-    @property
-    def position(self):
-        return self._state[:2]
-    
-    @property
-    def heading(self):
-        return self._state[2]
-    
-    @classmethod
-    def from_yaml(cls, config_fpath: str) -> 'LaserScanner':
         with open(config_fpath, "r") as f:
             config = yaml.safe_load(f)
         return cls(config)
 
-    def load_map(self, boundary_coords: list[PathNode], obstacle_list: list[list[PathNode]]) -> None:
-        self._map = BasicMap(boundary_coords=boundary_coords, obstacle_list=obstacle_list)
-        self._map_prepared = True
+    # ------------------------------------------------------------------
+    # Map loading (selects the backend)
+    # ------------------------------------------------------------------
 
-    def load_scanner(self, init_position: PathNode, init_heading: float) -> None:
-        """Initialize the laser scanner.
-
-        Args:
-            init_position: The initial position of the robot, (x, y).
-            init_heading: The initial heading of the robot, in radian.
-        """
-        self.laser_scan = LaserScanOutput.from_config(self._cfg)
-        self._state = [init_position[0], init_position[1], init_heading]
-        self._scanner_prepared = True
-
-    def scan(self, current_time: float, current_state: list[float]) -> LaserScanOutput:
-        """Scan the environment with the laser scanner.
+    def load_map(self, map_obj: SupportedMap) -> None:
+        """Attach a map and select the matching scanner backend.
 
         Args:
-            current_time: The current time.
-            current_state: The current state of the robot. It should be [x, y, heading].
+            map_obj: Either a :class:`~basic_map.map_geometric.GeometricMap`
+                (selects :class:`LaserScannerGeo`) or an
+                :class:`~basic_map.map_occupancy.OccupancyMap`
+                (selects :class:`LaserScannerOcc`).
 
         Raises:
-            ValueError: If the map or scanner is not prepared.
-            ValueError: If the current state is invalid.
+            TypeError: If *map_obj* is not one of the supported map types.
+        """
+        if isinstance(map_obj, GeometricMap):
+            backend: LaserScannerGeo | LaserScannerOcc = LaserScannerGeo(self._cfg)
+            backend.load_map(*map_obj())
+        elif isinstance(map_obj, OccupancyMap):
+            backend = LaserScannerOcc(self._cfg)
+            backend.load_map(map_obj)
+        else:
+            raise TypeError(
+                f"Unsupported map type: {type(map_obj).__name__}. "
+                "Expected GeometricMap or OccupancyMap."
+            )
+        self._backend = backend
+
+    # ------------------------------------------------------------------
+    # Scanner initialisation / scanning
+    # ------------------------------------------------------------------
+
+    def load_scanner(self, init_position: PathNode, init_heading: float) -> None:
+        """Initialise the scanner position and heading.
+
+        Args:
+            init_position: Starting position ``(x, y)`` in world coordinates.
+            init_heading: Starting heading in radians.
+
+        Raises:
+            ValueError: If :meth:`load_map` has not been called first.
+        """
+        self._require_backend()
+        self._backend.load_scanner(init_position, init_heading)  # type: ignore[union-attr]
+
+    def scan(self, current_time: float, current_state: list[float]) -> LaserScanOutput:
+        """Perform a laser scan at the given state.
+
+        Args:
+            current_time: Timestamp for the scan.
+            current_state: ``[x, y, heading]`` in world coordinates / radians.
 
         Returns:
-            LaserScanOutput: The laser scan output.
+            :class:`~basic_laser_scanner.laser_output.LaserScanOutput`.
+
+        Raises:
+            ValueError: If :meth:`load_map` or :meth:`load_scanner` has not
+                been called.
         """
-        if not self._map_prepared:
-            raise ValueError("Map not prepared.")
-        if not self._scanner_prepared:
-            raise ValueError("Scanner not prepared.")
-        if not isinstance(current_state, list) or len(current_state)!=3:
-            raise ValueError("Invalid current state.")
-        
-        self._state = current_state
-        self.laser_scan.timestamp = current_time
-        self.laser_scan.init_beams(self.position, self.heading)
+        self._require_backend()
+        return self._backend.scan(current_time, current_state)  # type: ignore[union-attr]
 
-        if not Polygon(self._map['boundary_coords']).contains(Point(current_state[0], current_state[1])):
-            warnings.warn("Scanner is outside the boundary!")
-            return self.laser_scan
+    def plot(self, ax, with_map: bool = False) -> None:
+        """Plot the current scan and optionally the map.
 
-        _x, _y = self.position
-        new_ranges = self.laser_scan.ranges.copy()
-        new_beams = self.laser_scan.beam_end_points.copy()
-        geometries = [Polygon(obstacle) for obstacle in self._map['obstacle_list']]
-        geometries.append(LineString(self._map['boundary_coords'] + [self._map['boundary_coords'][0]]))
-        for i, relative_angle in enumerate(self.laser_scan.angles):
-            angle = self.heading + relative_angle
-            beam = LineString([(_x, _y), (_x+self.laser_scan.range_max*math.cos(angle), _y+self.laser_scan.range_max*math.sin(angle))])
-            closest_distance = self.laser_scan.range_max
-            for geo in geometries:
-                if not geo.is_valid:
-                    geo = geo.buffer(0)
-                if beam.intersects(geo):
-                    intersection:BaseGeometry = beam.intersection(geo)
-                    if not intersection.is_empty:
-                        distance = intersection.distance(Point(_x, _y))
-                        if distance < closest_distance:
-                            closest_distance = distance
-            new_ranges[i] = closest_distance
-            new_beams[i] = (_x+closest_distance*math.cos(angle), _y+closest_distance*math.sin(angle))
+        Args:
+            ax: Matplotlib :class:`~matplotlib.axes.Axes` to draw on.
+            with_map: If ``True``, draw the map in the background.
 
-        self.laser_scan.update_ranges_and_beams(current_time, new_ranges, new_beams)
-        return self.laser_scan
-    
-    def plot(self, ax: Axes, with_map=False):
-        if not self._map_prepared:
-            raise ValueError("Map not prepared.")
-        if not self._scanner_prepared:
-            raise ValueError("Scanner not prepared.")
-        
-        if with_map:
-            boundary_plot = np.array(self._map['boundary_coords']+[self._map['boundary_coords'][0]])
-            ax.plot(boundary_plot[:,0], boundary_plot[:,1], 'b-')
-            for obstacle in self._map['obstacle_list']:
-                obstacle_plot = np.array(obstacle+[obstacle[0]])
-                ax.plot(obstacle_plot[:,0], obstacle_plot[:,1], 'r-')
-            ax.set_xlim(min(np.array(self._map['boundary_coords'])[:,0])-1, max(np.array(self._map['boundary_coords'])[:,0])+1)
-            ax.set_ylim(min(np.array(self._map['boundary_coords'])[:,1])-1, max(np.array(self._map['boundary_coords'])[:,1])+1)
+        Raises:
+            ValueError: If :meth:`load_map` or :meth:`load_scanner` has not
+                been called.
+        """
+        self._require_backend()
+        self._backend.plot(ax, with_map=with_map)  # type: ignore[union-attr]
 
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-        for beam in self.laser_scan.beam_end_points:
-            ax.plot([self.position[0], beam[0]], [self.position[1], beam[1]], 'gray', linestyle='-')
-        ax.plot(*self.position, 'ro')
-        
-        
-        
+    def _require_backend(self) -> None:
+        if self._backend is None:
+            raise ValueError("No map loaded. Call load_map() before using the scanner.")
+
+    # ------------------------------------------------------------------
+    # Pass-through properties (available after load_map + load_scanner)
+    # ------------------------------------------------------------------
+
+    @property
+    def state(self) -> list[float]:
+        self._require_backend()
+        return self._backend.state  # type: ignore[union-attr]
+
+    @property
+    def position(self):
+        self._require_backend()
+        return self._backend.position  # type: ignore[union-attr]
+
+    @property
+    def heading(self) -> float:
+        self._require_backend()
+        return self._backend.heading  # type: ignore[union-attr]
+
+    @property
+    def laser_scan(self) -> LaserScanOutput:
+        self._require_backend()
+        return self._backend.laser_scan  # type: ignore[union-attr]
