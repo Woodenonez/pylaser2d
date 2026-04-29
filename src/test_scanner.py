@@ -2,7 +2,7 @@ import os
 import math
 import pathlib
 
-from basic_laser_scanner.laser_scanner import LaserScanner
+from basic_laser_scanner.laser_scanner_geo import LaserScannerGeo
 from basic_laser_scanner.laser_output import LaserScanOutput
 from basic_map.map_geometric import GeometricMap
 
@@ -12,7 +12,7 @@ MAP_NAME_1 = "test_map_1"
 CFG_FNAME_2 = "sparse_scanner_spec.yaml"
 MAP_NAME_2 = "test_map_2"
 
-def test_scanner(config_file_name: str, map_name: str) -> tuple[LaserScanner, LaserScanOutput]:
+def test_scanner(config_file_name: str, map_name: str) -> tuple[LaserScannerGeo, LaserScanOutput]:
     root_dir = pathlib.Path(__file__).resolve().parents[1]
     config_fpath = os.path.join(root_dir, "config", config_file_name)
     map_path = os.path.join(root_dir, "data", map_name, "map.json")
@@ -22,7 +22,7 @@ def test_scanner(config_file_name: str, map_name: str) -> tuple[LaserScanner, La
 
     map_obj = GeometricMap.from_json(map_path)
 
-    scanner = LaserScanner.from_yaml(config_fpath)
+    scanner = LaserScannerGeo.from_yaml(config_fpath)
     scanner.load_map(*map_obj())
     scanner.load_scanner((current_state[0], current_state[1]), current_state[2])
 
