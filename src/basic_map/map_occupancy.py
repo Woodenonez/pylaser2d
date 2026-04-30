@@ -204,15 +204,15 @@ class OccupancyMap:
         """
         ox, oy = self._origin
         res = self._resolution
-        extent = [
+        extent = (
             ox,
             ox + self.width * res,
             oy,
             oy + self.height * res,
-        ]
+        )
         defaults = {"cmap": "gray_r", "vmin": 0, "vmax": 1, "origin": "lower"}
         defaults.update(imshow_kwargs)
-        ax.imshow(self._grid.astype(np.uint8), extent=extent, **defaults)
+        ax.imshow(self._grid.astype(np.uint8), extent=extent, **defaults) # type: ignore
 
 
 if __name__ == "__main__":

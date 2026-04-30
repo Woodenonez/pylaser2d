@@ -1,60 +1,124 @@
 # Python Laser Scanner / Lidar Simulator
-A small [laser scanner]/[lidar] simulator in Python. The main dependency is `shapely` for the geometry operations.
+
+A compact 2D laser scanner (lidar) simulator in Python, with two map backends:
+
+- Geometric maps (polygon boundary + polygon obstacles)
+- Occupancy maps (2D boolean grid)
+
+The scanner output format is inspired by ROS `sensor_msgs/LaserScan`.
 
 ![Example](doc/example.png)
 
-# Dependencies
-- `Numpy`
-- `Shapely`
-- `Matplotlib` (optional, for visualization)
-- `PyYAML`
+## Requirements
 
-# Quickstart
-This project uses [uv](https://docs.astral.sh/uv/) for dependency management and requires Python ≥ 3.11.
+- Python >= 3.11
+- numpy
+- shapely
+- matplotlib
+- pyyaml
 
-Install dependencies and run the example (from the root directory):
+Dependencies are managed in `pyproject.toml`.
+
+## Install
+
+This project uses [uv](https://docs.astral.sh/uv/):
+
 ```bash
 uv sync
-uv run python src/test_scanner.py
 ```
 
-# Usage
+The denpendency can also be installed with pip:
 
-## LaserScanner
-This is the main class to simulate the laser scanner. Initialize it using the `from_yaml` method, where the example configuration is in `config/`.
+```bash
+pip install -r requirements_short.txt
+```
 
-Before using the scanner, the map should be loaded via the `load_map` method, and the scanner should be initialized via the `load_scanner` method.
+## Project Layout
 
-Each `scan` method call will return a `LaserScanOutput` object.
+```text
+src/
+	laser_scanner/	# scanner implementations & output dataclass
+	basic_map/		# geometric and occupancy map
+demos/				# runnable visualization demos
+tests/				# unit tests
+config/				# scanner specs (yaml)
+data/				# sample geometric maps (json)
+```
 
-## LaserScanOutput
-The format (data class) of the output of the laser scanner. This part is in the order of:
-- Properties
-- Configuration to initialize the object
-- Steps to use the object
+## Quick Start
 
-### Property
-- angles: A tuple of the (float) angles of the beams.
-- angles_deg: Similar to `angles`, but in degrees.
-- state: The state of the object, (x, y, theta).
-- ranges: A list of the (float) ranges/distances of the beams.
-- beam_end_points: A list of the (x, y) coordinates of the endpoints of the beams.
+Run the scan demo on a geometric and occupancy map:
 
-Note that the order of the beams is from the minimum angle to the maximum angle (from the right to the left).
+```bash
+python demos/demo_scan.py --map-type geo
+python demos/demo_scan.py --map-type occ
+```
 
-### Configuration
-It contains the following fields, similar to the [ROS message] `sensor_msgs/LaserScan`:
-- angle_min (float): The minimum angle of the scan.
-- angle_max (float): The maximum angle of the scan.
-- angle_increment (float): The angular resolution of the scan.
-- range_min (float): The minimum range of the scan.
-- range_max (float): The maximum range of the scan.
-- frame_id (str): The frame id of the scan.
+Generate and visualize a random map:
 
-### Steps
-1. This object can be initialized from a dictionary containing the same fields, by calling `LaserScanOutput.from_config(...)`.
-2. Initialize the object by telling its initial state, by calling `init_beams(...)`.
-3. Update the object by calling `update_ranges_and_beams(...)`.
+```bash
+python demos/demo_random_map.py --map-type geo --complexity 3 --seed 0
+python demos/demo_random_map.py --map-type occ --complexity 3 --seed 0
+```
+
+## Run Tests
+
+With pytest:
+
+```bash
+pytest tests -v
+```
+
+## Usage
+
+### Unified Scanner API
+
+Use `LaserScanner` when you want one interface for both map types.
+
+Basic flow:
+
+1. Build scanner from YAML (`from_yaml`).
+2. Load a map (`load_map`) to select backend automatically.
+3. Initialize scanner pose (`load_scanner`).
+4. Call `scan(...)` each step to get a `LaserScanOutput`.
+
+Minimal example:
+
+```python
+from laser_scanner.laser_scanner import LaserScanner
+from basic_map.map_geometric import GeometricMap
+
+scanner = LaserScanner.from_yaml("config/dense_scanner_spec.yaml")
+geo_map = GeometricMap.from_json("data/test_map_1/map.json")
+
+scanner.load_map(geo_map)
+scanner.load_scanner((1.0, 1.0), 0.0)
+scan = scanner.scan(0.0, [1.0, 1.0, 0.0])
+
+print(scan.ranges[:5])
+```
+
+### `LaserScanOutput`
+
+Core fields:
+
+- `angles`: tuple of beam angles (rad)
+- `angles_deg`: tuple of beam angles (deg)
+- `state`: scanner state `[x, y, heading]`
+- `ranges`: range for each beam
+- `beam_end_points`: endpoint `(x, y)` for each beam
+
+The beam order is from `angle_min` to `angle_max`.
+
+Configuration fields:
+
+- `angle_min`
+- `angle_max`
+- `angle_increment`
+- `range_min`
+- `range_max`
+- `frame_id`
 
 ## Acknowledgment
-The implementation is based on [DQN-Boosted MPC for Collision-Free Navigation of Mobile Robots](https://github.com/Woodenonez/TrajTrack_MPCnDQN_RLBoost), where the original paper is available in [IEEE CASE 2023](https://ieeexplore.ieee.org/document/10260515).
+
+This implementation is based on [DQN-Boosted MPC for Collision-Free Navigation of Mobile Robots](https://github.com/Woodenonez/TrajTrack_MPCnDQN_RLBoost), with the paper available at [IEEE CASE 2023](https://ieeexplore.ieee.org/document/10260515).

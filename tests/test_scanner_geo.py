@@ -1,12 +1,12 @@
-"""Tests for the geometric-map laser scanner (LaserScannerGeo)."""
+"""Tests for GeometricMap and LaserScannerGeo."""
 import math
 import os
 import pathlib
 import unittest
 
-from basic_laser_scanner.laser_scanner_geo import LaserScannerGeo
-from basic_laser_scanner.laser_output import LaserScanOutput
 from basic_map.map_geometric import GeometricMap
+from laser_scanner.laser_scanner_geo import LaserScannerGeo
+from laser_scanner import LaserScanOutput
 
 
 ROOT_DIR = pathlib.Path(__file__).resolve().parents[1]

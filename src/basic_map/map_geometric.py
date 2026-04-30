@@ -3,7 +3,6 @@ from typing import TypedDict, Optional, Callable
 
 import numpy as np
 import matplotlib.pyplot as plt # type: ignore
-
 from matplotlib.axes import Axes # type: ignore
 
 

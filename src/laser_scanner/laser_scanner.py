@@ -41,8 +41,8 @@ from .laser_scanner_occ import LaserScannerOcc
 # ---------------------------------------------------------------------------
 # Import here for type-checking only; the actual isinstance checks below use
 # the same classes at runtime.
-from basic_map.map_geometric import GeometricMap
-from basic_map.map_occupancy import OccupancyMap
+from basic_map import GeometricMap
+from basic_map import OccupancyMap
 
 SupportedMap = Union[GeometricMap, OccupancyMap]
 
@@ -97,8 +97,9 @@ class LaserScanner:
         Raises:
             TypeError: If *map_obj* is not one of the supported map types.
         """
+        backend: LaserScannerGeo | LaserScannerOcc
         if isinstance(map_obj, GeometricMap):
-            backend: LaserScannerGeo | LaserScannerOcc = LaserScannerGeo(self._cfg)
+            backend = LaserScannerGeo(self._cfg)
             backend.load_map(*map_obj())
         elif isinstance(map_obj, OccupancyMap):
             backend = LaserScannerOcc(self._cfg)

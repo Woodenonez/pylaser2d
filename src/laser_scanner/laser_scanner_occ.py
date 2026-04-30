@@ -126,10 +126,17 @@ class LaserScannerOcc:
         occ = self._map
 
         # Convert scanner position to pixel coordinates (floating-point).
+        #
+        # OccupancyMap uses world coordinates at pixel centres
+        #   x = ox + col * res
+        #   y = oy + (H - 1 - row) * res
+        # while DDA boundary stepping assumes integer coordinates denote
+        # *cell edges*. Shift by +0.5 so centres map to half-integers and
+        # edges map to integers; this removes a systematic half-cell offset.
         ox, oy = occ.origin
         res = occ.resolution
-        c0 = (x - ox) / res
-        r0 = (occ.height - 1) - (y - oy) / res
+        c0 = (x - ox) / res + 0.5
+        r0 = (occ.height - 1) - (y - oy) / res + 0.5
 
         # Maximum range in pixels.
         max_range_px = self.laser_scan.range_max / res
